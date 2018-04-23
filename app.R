@@ -52,9 +52,7 @@ histogram_health <- suggestion_health %>%
         axis.title.x = element_blank()) +
   ggtitle("Solved suggestions according to the delay\nin solving it (in minutes)<br />\n ") 
 
-dates_by_typeId <- data.frame(dates = seq(Sys.Date() - 9, Sys.Date(), "day")) %>% 
-  mutate(dates = format(dates,format='%Y-%m-%d')) %>% 
-  uncount(5, .id = "HistoryTypeId")
+
 
 
 
@@ -336,10 +334,14 @@ server <- function(input, output){
     validate(need(
       input$dateRange[1] <= input$dateRange[2],
       message = "Last date can't be prior to first date."))    
+    # 
+    # dates <-
+    #   data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>%
+    #   mutate(dates = format(dates, format = '%Y-%m-%d'))
     
-    dates <-
-      data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>%
-      mutate(dates = format(dates, format = '%Y-%m-%d'))
+    dates_by_typeId <- data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>% 
+      mutate(dates = format(dates,format='%Y-%m-%d')) %>% 
+      uncount(5, .id = "HistoryTypeId")
     
     evol_suggest <- StringSuggestionHistory %>%
       filter(
