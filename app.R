@@ -8,6 +8,7 @@ library(viridis)
 library(emo)
 library(tidyr)
 library(plotly)
+library(scales)
 
 # load data
 
@@ -26,7 +27,7 @@ dates <- data.frame(dates = seq(Sys.Date() - 9, Sys.Date(), "day")) %>%
   
 suggestion_health <- StringSuggestionHistory %>%
   filter(!UserId %in% c(81867, 81869)) %>% 
-  mutate(CreationDate = as.POSIXct(CreationDate)) %>%
+  mutate(CreationDate = as.POSIXct(CreationDate, tz = "UTC")) %>%
   group_by(StringSuggestionId) %>%
   filter(any(HistoryTypeId %in% (3:5))) %>%
   summarise(created = min(CreationDate),
@@ -55,43 +56,7 @@ dates_by_typeId <- data.frame(dates = seq(Sys.Date() - 9, Sys.Date(), "day")) %>
   mutate(dates = format(dates,format='%Y-%m-%d')) %>% 
   uncount(5, .id = "HistoryTypeId")
 
-evol_suggest <- StringSuggestionHistory %>%
-  filter(!UserId %in% c(81867, 81869),
-         as.Date(CreationDate, format = "%Y-%m-%d") >= Sys.Date() - 9) %>% 
-  mutate(CreationDate = format(as.POSIXct(CreationDate), format='%Y-%m-%d')) %>%
-  group_by(StringSuggestionId) %>%
-  filter(any(HistoryTypeId %in% (1:5))) %>%
-  ungroup() %>% 
-  filter(HistoryTypeId != 7) %>% 
-  full_join(dates_by_typeId, by = c("CreationDate" = "dates", "HistoryTypeId" = "HistoryTypeId")) %>% 
-  mutate(HistoryTypeId = case_when(
-    HistoryTypeId == 1 ~ "created",
-    HistoryTypeId %in% c(2, 3) ~ "approved",
-    HistoryTypeId %in% c(4, 5) ~ "rejected")) %>% 
-  group_by(HistoryTypeId, CreationDate) %>% 
-  summarise(n = n()) %>%
-  ungroup() %>% 
-  mutate(n = ifelse(is.na(n), 0, n)
-         # ,
-         # CreationDate = as.Date(CreationDate)
-         )
 
-evol_suggest_plot <- evol_suggest %>% 
-  ggplot(aes(x = CreationDate, y = n, 
-             group = HistoryTypeId, 
-             color = HistoryTypeId,
-             text = paste('count: ', n))) +
-  geom_line() +
-  geom_point() +
-  scale_color_viridis(discrete = TRUE) + 
-  theme_minimal() +
-  theme(axis.text.x  = element_text(angle=60, vjust=0.5),
-        panel.background = element_rect(fill="#ffffff"),
-        plot.background = element_rect(fill="#EBF0F5"),
-        # legend.position = 'none', 
-        axis.title.y = element_blank(),
-        axis.title.x = element_blank()) +
-  ggtitle("Daily Activity")
 
 ####################
 # Users' Activity
@@ -222,6 +187,10 @@ quality_creators <- accepted_creators %>%
 #   ylab("número de sugerencias rechazadas") +
 #   ggtitle("Top 10 usuarios que rechazan sugerencias")
 
+
+
+
+
 ## UI CONFIG
 
 ## Header
@@ -232,15 +201,25 @@ sidebar <- dashboardSidebar(
   sidebarMenu(
     menuItem(text = "Overview", tabName = "overview", icon = icon("dashboard")),
     menuItem(text = "Health", tabName = "health", icon = icon("heartbeat")),
-    menuItem(text = "Users' Activity", tabName = "users", icon = icon("users"))
-  )
-)
+    menuItem(text = "Users' Activity", tabName = "users", icon = icon("users")),
+  tags$footer("traducir.win", align = "center",
+              style = "
+              position:absolute;
+              bottom:0;
+              width:100%;
+              height:50px;   /* Height of the footer */
+              color: white;
+              padding: 10px;
+              background-color: black;
+              z-index: 1000;")
+  ))
+
 
 ## Body content
 body <- dashboardBody(
   tabItems(
     
-    # Front Page
+    # Overview
     tabItem(
       tabName = "overview", 
       
@@ -290,18 +269,6 @@ body <- dashboardBody(
       )
     ),
     
-
-    # # health plot
-    # tabItem(
-    #   tabName = "health",
-    #   mainPanel(
-    #     h3(" Health"),
-    #     width = 12,
-    #     title = 'Health',
-    #     plotlyOutput('plotly_histogram_health'),
-    #     plotlyOutput('plotly_evol_suggest')
-    #   )
-    # ),
     
     # health plots
     tabItem(
@@ -311,14 +278,22 @@ body <- dashboardBody(
         title = 'Health',
         tabPanel(
           'Delay in solving',
-          plotlyOutput('plotly_histogram_health')
-        ),
+          plotlyOutput('plotly_histogram_health')),
+          
         tabPanel(
           'Daily activity',
-          plotlyOutput('plotly_evol_suggest')
-        )
-        )),
+          fluidRow(
+            column(width = 4,
+                   dateRangeInput('dateRange',
+                                  label = 'Date range input: yyyy-mm-dd',
+                                  start = Sys.Date() - 10, end = Sys.Date())
+            ),
+            column(width = 12,
+                   plotlyOutput('evol_suggest_plot'))
+        )))),
 
+    
+    
     # users activity plots
     tabItem(
       selected = TRUE,
@@ -346,16 +321,87 @@ ui <- dashboardPage(header, sidebar, body, skin = "purple")
 
 server <- function(input, output){
   
+  ## HEALTH
+  
   output$plotly_histogram_health <- renderPlotly(
     layout(ggplotly(histogram_health, tooltip = c("count", "delay")), 
            margin=list(t = 100, b = 60)))
   outputOptions(output, "plotly_histogram_health", suspendWhenHidden = FALSE)
   
-  output$plotly_evol_suggest <- renderPlotly(
-      layout(ggplotly(evol_suggest_plot, tooltip = c("text")), 
-           margin=list(b = 70)))
-  outputOptions(output, "plotly_evol_suggest", suspendWhenHidden = FALSE)
   
+  
+  ## ACTIVITY
+  activity <- reactive({
+    
+    validate(need(
+      input$dateRange[1] <= input$dateRange[2],
+      message = "Last date can't be prior to first date."))    
+    
+    dates <-
+      data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>%
+      mutate(dates = format(dates, format = '%Y-%m-%d'))
+    
+    evol_suggest <- StringSuggestionHistory %>%
+      filter(
+        !UserId %in% c(81867, 81869),
+        as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange[1],
+        as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange[2]
+      ) %>%
+      mutate(CreationDate = format(as.POSIXct(CreationDate, tz = "UTC"), format = '%Y-%m-%d')) %>%
+      group_by(StringSuggestionId) %>%
+      filter(any(HistoryTypeId %in% (1:5))) %>%
+      ungroup() %>%
+      filter(HistoryTypeId != 7) %>%
+      full_join(dates_by_typeId,
+                by = c("CreationDate" = "dates", "HistoryTypeId" = "HistoryTypeId")) %>%
+      mutate(HistoryTypeId = case_when(
+        HistoryTypeId == 1 ~ "created",
+        HistoryTypeId %in% c(2, 3) ~ "approved",
+        HistoryTypeId %in% c(4, 5) ~ "rejected"
+        )) %>%
+      group_by(HistoryTypeId, CreationDate) %>%
+      summarise(n = n()) %>%
+      ungroup() %>%
+      mutate(n = ifelse(is.na(n), 0, n))
+  })
+
+  output$evol_suggest_plot <- renderPlotly({
+    layout(
+      ggplotly(
+        activity() %>%
+          ggplot(
+            aes(x = as.POSIXct(CreationDate, tz = "UTC"),
+                y = n,
+                group = HistoryTypeId,
+                color = HistoryTypeId,
+                text = paste('count: ', n))) +
+          geom_line() +
+          geom_point() +
+          scale_x_datetime(
+            breaks = seq(as.POSIXct(input$dateRange[1], tz = "UTC"),
+                         as.POSIXct(input$dateRange[2], tz = "UTC"), "1 day"),
+            labels = date_format("%b-%d", tz = "UTC"),
+            limits = c(
+            as.POSIXct(input$dateRange[1], tz = "UTC"),
+            as.POSIXct(input$dateRange[2], tz = "UTC"))) +
+          scale_color_viridis(discrete = TRUE) +
+          theme_minimal() +
+          theme(
+            axis.text.x  = element_text(angle = 60, vjust = 0.5),
+            panel.background = element_rect(fill = "#ffffff"),
+            plot.background = element_rect(fill = "#EBF0F5"),
+            axis.title.y = element_blank(),
+            axis.title.x = element_blank()
+          ) +
+          ggtitle("Daily Activity"),
+        tooltip = c("text")),
+      margin = list(b = 70))
+  })
+  
+  outputOptions(output, "evol_suggest_plot", suspendWhenHidden = FALSE)
+  
+
+
   
   output$plotly_quality_creators <- renderPlotly(
     layout(ggplotly(quality_creators, tooltip = c("text")), 
