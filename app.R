@@ -18,6 +18,8 @@ StringSuggestionHistory <- read_csv(url("https://db.traducir.win/api/queries/22/
 
 users <- read_csv(url("https://db.traducir.win/api/queries/23/results.csv?api_key=YLxvVeOov6IvQtogh1huuYtvgObkIDLtttqyhFFR"))
 
+rejected <- read_csv(url("https://db.traducir.win/api/queries/24/results.csv?api_key=QrOeGMe1fESabMB7pYKobTU5ZjFh24uB9M5VQfDC"))
+
 
 ## UI CONFIG
 
@@ -75,7 +77,7 @@ body <- dashboardBody(
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Waiting review"], 
           subtitle = "Waiting review", 
-          href = "https://traducir.win/filters?suggestionsStatus=4", 
+          href = "https://traducir.win/filters?suggestionsStatus=2", 
           icon = icon("hourglass-start"),
           color = "purple"),
         valueBox(
@@ -85,15 +87,23 @@ body <- dashboardBody(
           icon = icon("hourglass-half"),
           color = "purple"),
         valueBox(
-          value = global_stats$Strings[global_stats$Metrics == "Rejected"], 
+          value = nrow(rejected), 
           subtitle = "Rejected", 
+          href = "https://db.traducir.win/queries/24#table",
           icon = icon("ban"),
-          color = "purple"),
+          color = "purple")),
+      
+      fluidRow(
         valueBox(
           value = length(unique(users$DisplayName)), 
+          subtitle = "Users", 
+          icon = icon("users"),
+          color = "yellow"),
+        valueBox(
+          value = length(unique(users$DisplayName[users$LastSeenDate >= Sys.Date()-5])), 
           subtitle = "Active Users", 
           icon = icon("users"),
-          color = "purple")
+          color = "yellow")
       )
     ),
     
