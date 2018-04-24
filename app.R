@@ -18,176 +18,6 @@ StringSuggestionHistory <- read_csv(url("https://db.traducir.win/api/queries/22/
 
 users <- read_csv(url("https://db.traducir.win/api/queries/23/results.csv?api_key=YLxvVeOov6IvQtogh1huuYtvgObkIDLtttqyhFFR"))
 
-#########
-# health
-#########
-
-dates <- data.frame(dates = seq(Sys.Date() - 9, Sys.Date(), "day")) %>% 
-  mutate(dates = format(dates,format='%Y-%m-%d'))
-  
-suggestion_health <- StringSuggestionHistory %>%
-  filter(!UserId %in% c(81867, 81869)) %>% 
-  mutate(CreationDate = as.POSIXct(CreationDate, tz = "UTC")) %>%
-  group_by(StringSuggestionId) %>%
-  filter(any(HistoryTypeId %in% (3:5))) %>%
-  summarise(created = min(CreationDate),
-            solved = max(CreationDate),
-            delay = as.numeric(difftime(solved, created, units="mins"))) %>%
-  mutate(date_solved = format(solved,format='%Y-%m-%d')) %>% 
-  full_join(dates, by = c("date_solved" = "dates")) %>% 
-  mutate(delay = ifelse(is.na(delay), 0, delay))
-          
-histogram_health <- suggestion_health %>%
-  filter(date_solved > Sys.Date() - 10) %>%
-  ggplot(aes(x = delay, fill = date_solved)) +
-  geom_histogram(show.legend = FALSE) +
-  scale_fill_viridis(discrete = TRUE) +
-  facet_wrap(~date_solved, nrow = 2) +
-  theme_minimal() +
-  theme(axis.text.x  = element_text(angle=60, vjust=0.5),
-        panel.background = element_rect(fill="#ffffff"),
-        plot.background = element_rect(fill="#EBF0F5"),
-        legend.position = 'none', 
-        axis.title.y = element_blank(),
-        axis.title.x = element_blank()) +
-  ggtitle("Solved suggestions according to the delay\nin solving it (in minutes)<br />\n ") 
-
-
-
-
-
-####################
-# Users' Activity
-###################
-
-accepted_creators <- StringSuggestionHistory %>%
-  filter(!UserId %in% c(81867, 81869)) %>% 
-  group_by(StringSuggestionId) %>%
-  filter(any(HistoryTypeId == 1),
-         any(HistoryTypeId == 3)) %>% 
-  ungroup() %>% 
-  filter(HistoryTypeId == 1) %>%
-  count(UserId, sort = TRUE) %>%
-  left_join(users, by = c("UserId" = "Id")) %>% 
-  select(DisplayName, n) %>%  
-  mutate(DisplayName = ifelse(
-    nchar(DisplayName) > 10, 
-    paste0(substr(DisplayName, 1, 7), "..."),
-    DisplayName))
-
-accepted_creators_plot <- accepted_creators %>% 
-  top_n(10) %>% 
-  ggplot(aes(reorder(DisplayName, -n), n, 
-             fill = reorder(DisplayName, -n),
-             text = paste('count: ', n)))+
-  geom_col() +
-  scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-  # coord_flip() +
-  xlab("") +
-  ylab("Approved suggestions") +
-  ggtitle("Top 10 users\nwith approved suggestions") +
-  theme_minimal() +
-  theme(panel.background = element_rect(fill="#ffffff"),
-        plot.background = element_rect(fill="#EBF0F5"),
-        legend.position = 'none')
-
-rejected_creators <- StringSuggestionHistory %>%
-  filter(!UserId %in% c(81867, 81869)) %>% 
-  group_by(StringSuggestionId) %>%
-  filter(any(HistoryTypeId == 1),
-         any(HistoryTypeId %in% c(4,5))) %>% 
-  ungroup() %>% 
-  filter(HistoryTypeId == 1) %>%
-  count(UserId, sort = TRUE) %>%
-  left_join(users, by = c("UserId" = "Id")) %>% 
-  select(DisplayName, n) %>% 
-  mutate(DisplayName = ifelse(
-    nchar(DisplayName) > 10, 
-    paste0(substr(DisplayName, 1, 7), "..."),
-    DisplayName))
-
-rejected_creators_plot <- rejected_creators %>% 
-  top_n(10) %>% 
-  ggplot(aes(reorder(DisplayName, -n), n, 
-             fill = reorder(DisplayName, -n),
-             text = paste('count: ', n))) +
-  geom_col() +
-  scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-  # coord_flip() +
-  xlab("") +
-  ylab("Rejected suggestions") +
-  ggtitle("Top 10 users\nwith rejected suggestions")+
-  theme_minimal() +
-  theme(panel.background = element_rect(fill="#ffffff"),
-        plot.background = element_rect(fill="#EBF0F5"),
-        legend.position = 'none')
-
-# ratio approv/rej
-
-quality_creators <- accepted_creators %>% 
-  rename(acc = n) %>% 
-  left_join(rejected_creators) %>% 
-  rename(rej = n) %>% 
-  mutate(rej = coalesce(rej, 0L),
-         rej_per_acc = ifelse(acc == 0, 0,
-                            rej/acc)) %>% 
-  filter(acc + rej > 20) %>%
-  arrange(desc(rej_per_acc)) %>% 
-  top_n(10, rej_per_acc) %>% 
-  ggplot(aes(reorder(DisplayName, -rej_per_acc), 
-             rej_per_acc, 
-             fill = reorder(DisplayName, -rej_per_acc),
-             text = paste0('rej/acc: ', round(rej_per_acc * 100, 2), '%'))) +
-  geom_col() +
-  scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-  # coord_flip() +
-  xlab("") +
-  ylab("rejected/accepted suggestions") +
-  ggtitle("Top 10 users with more\nrejections for every accepted suggestion")+
-  theme_minimal() +
-  theme(panel.background = element_rect(fill="#ffffff"),
-        plot.background = element_rect(fill="#EBF0F5"),
-        legend.position = 'none')
-
-# trusted_approvers <- users_activity %>%
-#   filter(HistoryTypeId == 2) %>%
-#   select(-HistoryTypeId) %>% 
-#   top_n(10) %>% 
-#   ggplot(aes(reorder(DisplayName, n), n, fill = reorder(DisplayName, -n)))+
-#   geom_col() +
-#   scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-#   coord_flip() +
-#   xlab("") +
-#   ylab("número de sugerencias aprobadas") +
-#   ggtitle("Top 10 trusted usuarios que aprueban sugerencias")
-# 
-# reviewers_approvers <- users_activity %>%
-#   filter(HistoryTypeId == 3) %>%
-#   select(-HistoryTypeId) %>% 
-#   top_n(10) %>% 
-#   ggplot(aes(reorder(DisplayName, n), n, fill = reorder(DisplayName, -n)))+
-#   geom_col() +
-#   scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-#   coord_flip() +
-#   xlab("") +
-#   ylab("número de sugerencias aprobadas") +
-#   ggtitle("Top 10 reviewers que aprueban sugerencias")
-# 
-# rejectors <- users_activity %>%
-#   filter(HistoryTypeId %in% c(4, 5)) %>%
-#   select(-HistoryTypeId) %>% 
-#   top_n(10) %>% 
-#   ggplot(aes(reorder(DisplayName, n), n, fill = reorder(DisplayName, -n)))+
-#   geom_col() +
-#   scale_fill_viridis(discrete = TRUE, guide = FALSE) +
-#   coord_flip() +
-#   xlab("") +
-#   ylab("número de sugerencias rechazadas") +
-#   ggtitle("Top 10 usuarios que rechazan sugerencias")
-
-
-
-
 
 ## UI CONFIG
 
@@ -200,7 +30,8 @@ sidebar <- dashboardSidebar(
     menuItem(text = "Overview", tabName = "overview", icon = icon("dashboard")),
     menuItem(text = "Health", tabName = "health", icon = icon("heartbeat")),
     menuItem(text = "Users' Activity", tabName = "users", icon = icon("users")),
-  tags$footer("traducir.win", align = "center",
+    
+    tags$footer(HTML('<p align="center"><a href="https://traducir.win" target="_blank">traducir.win</a></p>'),
               style = "
               position:absolute;
               bottom:0;
@@ -233,37 +64,36 @@ body <- dashboardBody(
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Translated"], 
           subtitle = "Translated", 
-          icon = icon("fire"),
+          icon = icon("trophy"),
           color = "purple"),
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Remaining"], 
           subtitle = "Remaining", 
           href = "https://traducir.win/filters?translationStatus=2",
-          icon = icon("fire"),
+          icon = icon("coffee"),
           color = "purple"),
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Waiting review"], 
           subtitle = "Waiting review", 
           href = "https://traducir.win/filters?suggestionsStatus=4", 
-          icon = icon("fire"),
+          icon = icon("hourglass-start"),
           color = "purple"),
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Waiting approval"], 
           subtitle = "Waiting approval", 
           href = "https://traducir.win/filters?suggestionsStatus=3",
-          icon = icon("fire"),
+          icon = icon("hourglass-half"),
           color = "purple"),
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Rejected"], 
           subtitle = "Rejected", 
-          icon = icon("fire"),
+          icon = icon("ban"),
           color = "purple"),
         valueBox(
           value = length(unique(users$DisplayName)), 
           subtitle = "Active Users", 
-          icon = icon("fire"),
-          color = "purple"
-        )
+          icon = icon("users"),
+          color = "purple")
       )
     ),
     
@@ -276,16 +106,24 @@ body <- dashboardBody(
         title = 'Health',
         tabPanel(
           'Delay in solving',
-          plotlyOutput('plotly_histogram_health')),
+          fluidRow(
+            column(width = 4,
+                   dateRangeInput('dateRange_delay',
+                                  label = 'Date range:',
+                                  start = Sys.Date() - 9, 
+                                  end = Sys.Date())),
+            column(width = 12,
+                   plotlyOutput('histogram_health_plot'))
+            )),
           
         tabPanel(
           'Daily activity',
           fluidRow(
             column(width = 4,
-                   dateRangeInput('dateRange',
-                                  label = 'Date range input: yyyy-mm-dd',
-                                  start = Sys.Date() - 10, end = Sys.Date())
-            ),
+                   dateRangeInput('dateRange_dailyact',
+                                  label = 'Date range:',
+                                  start = Sys.Date() - 15, 
+                                  end = Sys.Date())),
             column(width = 12,
                    plotlyOutput('evol_suggest_plot'))
         )))),
@@ -300,16 +138,37 @@ body <- dashboardBody(
         title = "Users' Activity",
         tabPanel(
           'Quality of suggestions',
-          plotlyOutput('plotly_quality_creators')
-        ),
+          fluidRow(
+            column(width = 4,
+                   dateRangeInput('dateRange_quality',
+                                  label = 'Date range:',
+                                  start = Sys.Date() - 15, 
+                                  end = Sys.Date())),
+            column(width = 12,
+                   plotlyOutput('quality_creators_plot'))
+            )),
         tabPanel(
           'Top Accepted',
-          plotlyOutput('plotly_accepted_creators')
-        ),
+          fluidRow(
+            column(width = 4,
+                   dateRangeInput('dateRange_acc',
+                                  label = 'Date range:',
+                                  start = Sys.Date() - 15, 
+                                  end = Sys.Date())),
+            column(width = 12,
+                   plotlyOutput('accepted_creators_plot'))
+            )),
         tabPanel(
           'Top Rejected',
-          plotlyOutput('plotly_rejected_creators')
-        )
+          fluidRow(
+            column(width = 4,
+                   dateRangeInput('dateRange_rej',
+                                  label = 'Date range:',
+                                  start = Sys.Date() - 15, 
+                                  end = Sys.Date())),
+            column(width = 12,
+                   plotlyOutput('rejected_creators_plot'))
+          ))
       ))
   )
 )
@@ -319,36 +178,82 @@ ui <- dashboardPage(header, sidebar, body, skin = "purple")
 
 server <- function(input, output){
   
-  ## HEALTH
+  ## HEALTH - DELAY
+
+  health_delay <- reactive({
+    
+    validate(need(
+      input$dateRange_delay[1] <= input$dateRange_delay[2],
+      message = "Last date can't be prior to first date."))  
+    
+    validate(need(
+      input$dateRange_delay[1] > input$dateRange_delay[2] - 10,
+      message = "Maximum difference is 10 days.")) 
   
-  output$plotly_histogram_health <- renderPlotly(
-    layout(ggplotly(histogram_health, tooltip = c("count", "delay")), 
-           margin=list(t = 100, b = 60)))
-  outputOptions(output, "plotly_histogram_health", suspendWhenHidden = FALSE)
+    dates <- data.frame(dates = seq(input$dateRange_delay[1], 
+                                    input$dateRange_delay[2], "day")) %>% 
+      mutate(dates = format(dates,format='%Y-%m-%d'))
+  
+    StringSuggestionHistory %>%
+      filter(!UserId %in% c(81867, 81869),
+             as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_delay[1],
+             as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_delay[2]) %>% 
+      group_by(StringSuggestionId) %>%
+      filter(any(HistoryTypeId %in% (3:5))) %>%
+      summarise(created = min(CreationDate),
+                solved = max(CreationDate),
+                delay = as.numeric(difftime(solved, created, units="mins"))) %>%
+      mutate(date_solved = format(solved, format='%Y-%m-%d')) %>% 
+      full_join(dates, by = c("date_solved" = "dates")) %>% 
+      mutate(delay = ifelse(is.na(delay), NA, delay))
+  })
+  
+  output$histogram_health_plot <- renderPlotly({
+    layout(
+      ggplotly(
+        health_delay() %>%
+            ggplot(aes(x = delay, fill = date_solved)) +
+            geom_histogram(show.legend = FALSE) +
+            scale_fill_viridis(discrete = TRUE) +
+            facet_wrap(~date_solved, nrow = 2) +
+            theme_minimal() +
+            theme(axis.text.x  = element_text(angle=60, vjust=0.5),
+                  panel.background = element_rect(fill="#ffffff"),
+                  plot.background = element_rect(fill="#EBF0F5"),
+                  legend.position = 'none', 
+                  axis.title.y = element_blank(),
+                  axis.title.x = element_blank()) +
+            ggtitle("Solved suggestions according to the delay\nin solving it (in minutes)<br />\n "), 
+          tooltip = c("count", "delay")), 
+      margin=list(t = 100, b = 60))
+  })
+  
+  outputOptions(output, "histogram_health_plot", suspendWhenHidden = FALSE)
+    
+    
+
   
   
   
-  ## ACTIVITY
+  
+  
+  ## HEALTH - ACTIVITY
+  
   activity <- reactive({
     
     validate(need(
-      input$dateRange[1] <= input$dateRange[2],
+      input$dateRange_dailyact[1] <= input$dateRange_dailyact[2],
       message = "Last date can't be prior to first date."))    
-    # 
-    # dates <-
-    #   data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>%
-    #   mutate(dates = format(dates, format = '%Y-%m-%d'))
     
-    dates_by_typeId <- data.frame(dates = seq(input$dateRange[1], input$dateRange[2], "day")) %>% 
+    dates_by_typeId <- data.frame(dates = seq(input$dateRange_dailyact[1], input$dateRange_dailyact[2], "day")) %>% 
       mutate(dates = format(dates,format='%Y-%m-%d')) %>% 
       uncount(5, .id = "HistoryTypeId")
     
-    evol_suggest <- StringSuggestionHistory %>%
+    StringSuggestionHistory %>%
       filter(
         !UserId %in% c(81867, 81869),
-        as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange[1],
-        as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange[2]
-      ) %>%
+        as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_dailyact[1],
+        as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_dailyact[2]) %>%
       mutate(CreationDate = format(as.POSIXct(CreationDate, tz = "UTC"), format = '%Y-%m-%d')) %>%
       group_by(StringSuggestionId) %>%
       filter(any(HistoryTypeId %in% (1:5))) %>%
@@ -359,12 +264,11 @@ server <- function(input, output){
       mutate(HistoryTypeId = case_when(
         HistoryTypeId == 1 ~ "created",
         HistoryTypeId %in% c(2, 3) ~ "approved",
-        HistoryTypeId %in% c(4, 5) ~ "rejected"
-        )) %>%
+        HistoryTypeId %in% c(4, 5) ~ "rejected")) %>%
       group_by(HistoryTypeId, CreationDate) %>%
       summarise(n = n()) %>%
       ungroup() %>%
-      mutate(n = ifelse(is.na(n), 0, n))
+      mutate(n = ifelse(is.na(n), NA, n))
   })
 
   output$evol_suggest_plot <- renderPlotly({
@@ -380,12 +284,12 @@ server <- function(input, output){
           geom_line() +
           geom_point() +
           scale_x_datetime(
-            breaks = seq(as.POSIXct(input$dateRange[1], tz = "UTC"),
-                         as.POSIXct(input$dateRange[2], tz = "UTC"), "1 day"),
+            breaks = seq(as.POSIXct(input$dateRange_dailyact[1], tz = "UTC"),
+                         as.POSIXct(input$dateRange_dailyact[2], tz = "UTC"), "1 day"),
             labels = date_format("%b-%d", tz = "UTC"),
             limits = c(
-            as.POSIXct(input$dateRange[1], tz = "UTC"),
-            as.POSIXct(input$dateRange[2], tz = "UTC"))) +
+            as.POSIXct(input$dateRange_dailyact[1], tz = "UTC"),
+            as.POSIXct(input$dateRange_dailyact[2], tz = "UTC"))) +
           scale_color_viridis(discrete = TRUE) +
           theme_minimal() +
           theme(
@@ -402,27 +306,200 @@ server <- function(input, output){
   
   outputOptions(output, "evol_suggest_plot", suspendWhenHidden = FALSE)
   
+  
+  
+  
+  # USERS' ACTIVITY
+  
+  # Accepted suggestions
+  
+  accepted_creators <- reactive({
+    
+    validate(need(
+      input$dateRange_acc[1] <= input$dateRange_acc[2],
+      message = "Last date can't be prior to first date."))    
+    
+  StringSuggestionHistory %>%
+    filter(!UserId %in% c(81867, 81869),
+           as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_acc[1],
+           as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_acc[2]) %>% 
+    group_by(StringSuggestionId) %>%
+    filter(any(HistoryTypeId == 1),
+           any(HistoryTypeId == 3)) %>% 
+    ungroup() %>% 
+    filter(HistoryTypeId == 1) %>%
+    count(UserId, sort = TRUE) %>%
+    left_join(users, by = c("UserId" = "Id")) %>% 
+    select(DisplayName, n) %>%  
+    mutate(DisplayName = ifelse(
+      nchar(DisplayName) > 10, 
+      paste0(substr(DisplayName, 1, 7), "..."),
+      DisplayName))
+  })
+  
+  output$accepted_creators_plot <- renderPlotly({
+    layout(
+      ggplotly(
+        accepted_creators() %>% 
+          top_n(10) %>% 
+          ggplot(aes(reorder(DisplayName, -n), n, 
+                     fill = reorder(DisplayName, -n),
+                     text = paste('count: ', n)))+
+          geom_col() +
+          scale_fill_viridis(discrete = TRUE, guide = FALSE) +
+          # coord_flip() +
+          xlab("") +
+          ylab("Approved suggestions") +
+          ggtitle("Top 10 users\nwith approved suggestions") +
+          theme_minimal() +
+          theme(panel.background = element_rect(fill="#ffffff"),
+                plot.background = element_rect(fill="#EBF0F5"),
+                legend.position = 'none'), 
+        tooltip = c("text")), 
+      margin=list(t = 100, b = 90),
+      xaxis = list(tickangle = 60))
+  })
+  
+  outputOptions(output, "accepted_creators_plot", suspendWhenHidden = FALSE)
+  
+  # Rejected suggestions
+  
+  rejected_creators <- reactive({
+    
+    validate(need(
+      input$dateRange_rej[1] <= input$dateRange_rej[2],
+      message = "Last date can't be prior to first date."))    
+    
+    StringSuggestionHistory %>%
+    filter(!UserId %in% c(81867, 81869),
+           as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_rej[1],
+           as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_rej[2]) %>%
+    group_by(StringSuggestionId) %>%
+    filter(any(HistoryTypeId == 1),
+           any(HistoryTypeId %in% c(4,5))) %>%
+    ungroup() %>%
+    filter(HistoryTypeId == 1) %>%
+    count(UserId, sort = TRUE) %>%
+    left_join(users, by = c("UserId" = "Id")) %>%
+    select(DisplayName, n) %>%
+    mutate(DisplayName = ifelse(
+      nchar(DisplayName) > 10,
+      paste0(substr(DisplayName, 1, 7), "..."),
+      DisplayName))
+  })
+  
+  output$rejected_creators_plot <- renderPlotly({
+    
+    layout(
+      ggplotly(
+        rejected_creators() %>% 
+          top_n(10) %>%
+          ggplot(aes(reorder(DisplayName, -n), n,
+                     fill = reorder(DisplayName, -n),
+                     text = paste('count: ', n))) +
+          geom_col() +
+          scale_fill_viridis(discrete = TRUE, guide = FALSE) +
+          # coord_flip() +
+          xlab("") +
+          ylab("Rejected suggestions") +
+          ggtitle("Top 10 users\nwith rejected suggestions")+
+          theme_minimal() +
+          theme(panel.background = element_rect(fill="#ffffff"),
+                plot.background = element_rect(fill="#EBF0F5"),
+                legend.position = 'none'), 
+        tooltip = c("text")), 
+      margin=list(t = 100, b = 90),
+      xaxis = list(tickangle = 60))
+  })
+  
+  outputOptions(output, "rejected_creators_plot", suspendWhenHidden = FALSE)
 
+  # Ratio rejected/accepted suggestions
+  
+  quality_ratio <- reactive({
+    
+    validate(need(
+      input$dateRange_quality[1] <= input$dateRange_quality[2],
+      message = "Last date can't be prior to first date.")) 
+    
+    acc <- StringSuggestionHistory %>%
+      filter(!UserId %in% c(81867, 81869),
+             as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_quality[1],
+             as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_quality[2]) %>% 
+      group_by(StringSuggestionId) %>%
+      filter(any(HistoryTypeId == 1),
+             any(HistoryTypeId == 3)) %>% 
+      ungroup() %>% 
+      filter(HistoryTypeId == 1) %>%
+      count(UserId, sort = TRUE) %>%
+      left_join(users, by = c("UserId" = "Id")) %>% 
+      select(DisplayName, n) %>%  
+      mutate(DisplayName = ifelse(
+        nchar(DisplayName) > 10, 
+        paste0(substr(DisplayName, 1, 7), "..."),
+        DisplayName))
+    
+    rej <- StringSuggestionHistory %>%
+      filter(!UserId %in% c(81867, 81869),
+             as.Date(CreationDate, format = "%Y-%m-%d") >= input$dateRange_quality[1],
+             as.Date(CreationDate, format = "%Y-%m-%d") <= input$dateRange_quality[2]) %>%
+      group_by(StringSuggestionId) %>%
+      filter(any(HistoryTypeId == 1),
+             any(HistoryTypeId %in% c(4,5))) %>%
+      ungroup() %>%
+      filter(HistoryTypeId == 1) %>%
+      count(UserId, sort = TRUE) %>%
+      left_join(users, by = c("UserId" = "Id")) %>%
+      select(DisplayName, n) %>%
+      mutate(DisplayName = ifelse(
+        nchar(DisplayName) > 10,
+        paste0(substr(DisplayName, 1, 7), "..."),
+        DisplayName))
+    
+    acc %>%
+      rename(acc = n) %>%
+      left_join(rej) %>%
+      rename(rej = n) %>%
+      mutate(rej = coalesce(rej, 0L),
+             rej_per_acc = ifelse(acc == 0, 0,
+                                  rej/acc)) %>%
+      filter(acc + rej > 20) %>%
+      arrange(desc(rej_per_acc)) %>%
+      top_n(10, rej_per_acc)
+  
+  })
+  
+  output$quality_creators_plot <- renderPlotly({
+    
+    validate(need(
+      nrow(quality_ratio()) > 0,
+      message = "No users with at least 20 solved suggestions in this period. Try expanding the date range.")) 
+    
+    layout(
+      ggplotly(
+        quality_ratio() %>%
+          ggplot(aes(reorder(DisplayName, -rej_per_acc),
+                     rej_per_acc,
+                     fill = reorder(DisplayName, -rej_per_acc),
+                     text = paste0('rej/acc: ', round(rej_per_acc * 100, 2), '%'))) +
+          geom_col() +
+          scale_fill_viridis(discrete = TRUE, guide = FALSE) +
+          # coord_flip() +
+          xlab("") +
+          ylab("rejected/accepted suggestions") +
+          ggtitle("Top 10 users with more\nrejections for every accepted suggestion")+
+          theme_minimal() +
+          theme(panel.background = element_rect(fill="#ffffff"),
+                plot.background = element_rect(fill="#EBF0F5"),
+                legend.position = 'none'), 
+        tooltip = c("text")), 
+      margin=list(t = 100, b = 90),
+      xaxis = list(tickangle = 60))
+    
+  })
+  
+  outputOptions(output, "quality_creators_plot", suspendWhenHidden = FALSE)
 
-  
-  output$plotly_quality_creators <- renderPlotly(
-    layout(ggplotly(quality_creators, tooltip = c("text")), 
-           margin=list(t = 100, b = 90),
-           xaxis = list(tickangle = 60)))
-  outputOptions(output, "plotly_quality_creators", suspendWhenHidden = FALSE)
-  
-  output$plotly_accepted_creators <- renderPlotly(
-    layout(ggplotly(accepted_creators_plot, tooltip = c("text")), 
-           margin=list(t = 100, b = 90),
-           xaxis = list(tickangle = 60)))
-  outputOptions(output, "plotly_accepted_creators", suspendWhenHidden = FALSE)
-  
-  output$plotly_rejected_creators <- renderPlotly(
-    layout(ggplotly(rejected_creators_plot, tooltip = c("text")), 
-           margin=list(t = 100, b = 90),
-           xaxis = list(tickangle = 60)))
-  outputOptions(output, "plotly_rejected_creators", suspendWhenHidden = FALSE)
-  
 }
 
 shinyApp(ui, server)
