@@ -231,12 +231,6 @@ server <- function(input, output){
   outputOptions(output, "histogram_health_plot", suspendWhenHidden = FALSE)
     
     
-
-  
-  
-  
-  
-  
   ## HEALTH - ACTIVITY
   
   activity <- reactive({
