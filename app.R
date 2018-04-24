@@ -230,7 +230,10 @@ server <- function(input, output){
           ggplot(aes(x = delay, fill = date_solved)) +
           geom_histogram(show.legend = FALSE, binwidth = 6) +
           scale_fill_viridis(discrete = TRUE) +
-          scale_x_continuous(breaks =  seq(0, as.numeric(max(health_delay()$delay, na.rm = TRUE)), 6)) +
+          scale_x_continuous(breaks =  seq(0, max(24, as.numeric(max(health_delay()$delay, na.rm = TRUE))), 6),
+                             limits = c(
+                               0,
+                               max(24, max(health_delay()$delay, na.rm = TRUE)))) +
           facet_wrap(~date_solved, nrow = 2) +
           theme_minimal() +
           theme(axis.text.x  = element_text(angle=60, hjust = 1, vjust=0.5),
