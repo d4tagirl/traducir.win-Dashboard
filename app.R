@@ -123,8 +123,11 @@ body <- dashboardBody(
                                   start = Sys.Date() - 9, 
                                   end = Sys.Date())),
             column(width = 12,
-                   plotlyOutput('histogram_health_plot'))
-            )),
+                   plotlyOutput('histogram_health_plot'))),
+            fluidRow(
+              HTML("<p align='center'>Distribution of the approval/rejection's delay since a suggestion is created,</br>filtering out those that last less than a minute.</p>")
+            )
+          ),
           
         tabPanel(
           'Daily activity',
@@ -212,30 +215,33 @@ server <- function(input, output){
       filter(any(HistoryTypeId %in% (3:5))) %>%
       summarise(created = min(CreationDate),
                 solved = max(CreationDate),
-                delay = as.numeric(difftime(solved, created, units="mins"))) %>%
+                delay = as.numeric(difftime(solved, created, units="hours"))) %>%
+      filter(delay >= 1) %>%
       mutate(date_solved = format(solved, format='%Y-%m-%d')) %>% 
-      full_join(dates, by = c("date_solved" = "dates")) %>% 
-      mutate(delay = ifelse(is.na(delay), NA, delay))
+      full_join(dates, by = c("date_solved" = "dates")) 
+    # %>% 
+      # mutate(delay = ifelse(is.na(delay), NA, delay))
   })
   
   output$histogram_health_plot <- renderPlotly({
     layout(
       ggplotly(
         health_delay() %>%
-            ggplot(aes(x = delay, fill = date_solved)) +
-            geom_histogram(show.legend = FALSE) +
-            scale_fill_viridis(discrete = TRUE) +
-            facet_wrap(~date_solved, nrow = 2) +
-            theme_minimal() +
-            theme(axis.text.x  = element_text(angle=60, vjust=0.5),
-                  panel.background = element_rect(fill="#ffffff"),
-                  plot.background = element_rect(fill="#EBF0F5"),
-                  legend.position = 'none', 
-                  axis.title.y = element_blank(),
-                  axis.title.x = element_blank()) +
-            ggtitle("Solved suggestions according to the delay\nin solving it (in minutes)<br />\n "), 
-          tooltip = c("count", "delay")), 
-      margin=list(t = 100, b = 60))
+          ggplot(aes(x = delay, fill = date_solved)) +
+          geom_histogram(show.legend = FALSE, binwidth = 6) +
+          scale_fill_viridis(discrete = TRUE) +
+          scale_x_continuous(breaks =  seq(0, as.numeric(max(health_delay()$delay, na.rm = TRUE)), 6)) +
+          facet_wrap(~date_solved, nrow = 2) +
+          theme_minimal() +
+          theme(axis.text.x  = element_text(angle=60, hjust = 1, vjust=0.5),
+                panel.background = element_rect(fill="#ffffff"),
+                plot.background = element_rect(fill="#EBF0F5"),
+                legend.position = 'none', 
+                axis.title.y = element_blank(),
+                axis.title.x = element_blank()) +
+          ggtitle("Solved suggestions according to the delay\nin solving it (in hours, every 6 hours)<br />\n "), 
+        tooltip = c("count")), 
+    margin=list(t = 100, b = 60))
   })
   
   outputOptions(output, "histogram_health_plot", suspendWhenHidden = FALSE)
