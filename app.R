@@ -223,8 +223,6 @@ server <- function(input, output){
       filter(delay >= 1) %>%
       mutate(date_solved = format(solved, format='%Y-%m-%d')) %>% 
       full_join(dates, by = c("date_solved" = "dates")) 
-    # %>% 
-      # mutate(delay = ifelse(is.na(delay), NA, delay))
   })
   
   output$histogram_health_plot <- renderPlotly({
@@ -232,12 +230,10 @@ server <- function(input, output){
       ggplotly(
         health_delay() %>%
           ggplot(aes(x = delay, fill = date_solved)) +
-          geom_histogram(show.legend = FALSE, binwidth = 6) +
+          geom_histogram(show.legend = FALSE, binwidth = 6, boundary = 0) +
           scale_fill_viridis(discrete = TRUE) +
           scale_x_continuous(breaks =  seq(0, max(24, as.numeric(max(health_delay()$delay, na.rm = TRUE))), 6),
-                             limits = c(
-                               0,
-                               max(24, max(health_delay()$delay, na.rm = TRUE)))) +
+                             limits = c(0, max(24, max(health_delay()$delay, na.rm = TRUE)))) +
           facet_wrap(~date_solved, nrow = 2) +
           theme_minimal() +
           theme(axis.text.x  = element_text(angle=60, hjust = 1, vjust=0.5),
@@ -250,7 +246,7 @@ server <- function(input, output){
         tooltip = c("count")), 
     margin=list(t = 100, b = 60))
   })
-  
+
   outputOptions(output, "histogram_health_plot", suspendWhenHidden = FALSE)
     
     

@@ -5,9 +5,9 @@ account: d4tagirl
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 328000
-bundleId: 1336788
+bundleId: 1341025
 url: https://d4tagirl.shinyapps.io/traducir/
-when: 1524599869.6312
+when: 1524756888.15774
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: images/.DS_Store|images/daily_act.png|images/delay.png|images/main.png|images/top_users.png
+ignoredFiles: README.md|images/.DS_Store|images/daily_act.png|images/delay.png|images/main.png|images/top_users.png
