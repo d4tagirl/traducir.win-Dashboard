@@ -13,4 +13,4 @@ https://d4tagirl.shinyapps.io/traducir/
 
 ## Notes
 
-This dashboard was design with according to my understanding of how traducir.win works, but I'm not one of its users. Feel free to make a PR or open an issue to propose changes or new features. 
+This dashboard was designed according to my understanding of how traducir.win works, but I'm not one of its users. Feel free to make a PR or open an issue to propose changes or new features. 
