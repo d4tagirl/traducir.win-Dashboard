@@ -18,8 +18,11 @@ StringSuggestionHistory <- read_csv(url("https://db.traducir.win/api/queries/22/
 
 users <- read_csv(url("https://db.traducir.win/api/queries/23/results.csv?api_key=YLxvVeOov6IvQtogh1huuYtvgObkIDLtttqyhFFR"))
 
-rejected <- read_csv(url("https://db.traducir.win/api/queries/24/results.csv?api_key=QrOeGMe1fESabMB7pYKobTU5ZjFh24uB9M5VQfDC"))
-
+suggestions_by_status <- read_csv(url("https://db.traducir.win/api/queries/25/results.csv?api_key=1ubehnIrkIWfldGs11iE9Aky9731x313GkiDtIWr")) %>% 
+  rename(count = X2) %>% 
+  full_join(data_frame(StateId = c(1:5))) %>% 
+  mutate(count = coalesce(count, 0L))
+  
 
 ## UI CONFIG
 
@@ -59,36 +62,37 @@ body <- dashboardBody(
           value = global_stats$Strings[global_stats$Metrics == "Total"], 
           subtitle = "Strings Count", 
           icon = icon("fire"),
-          color = "yellow")
-        ),
+          color = "yellow")),
       
       fluidRow(
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Translated"], 
-          subtitle = "Translated", 
+          subtitle = "Strings Translated", 
           icon = icon("trophy"),
-          color = "purple"),
+          color = "yellow"),
         valueBox(
           value = global_stats$Strings[global_stats$Metrics == "Remaining"], 
-          subtitle = "Remaining", 
+          subtitle = "Strings Remaining", 
           href = "https://traducir.win/filters?translationStatus=2",
           icon = icon("coffee"),
-          color = "purple"),
+          color = "yellow")),
+      
+      fluidRow(
         valueBox(
-          value = global_stats$Strings[global_stats$Metrics == "Waiting review"], 
-          subtitle = "Waiting review", 
+          value = suggestions_by_status$count[suggestions_by_status$StateId == 2], 
+          subtitle = "Suggestions Waiting review", 
           href = "https://traducir.win/filters?suggestionsStatus=2", 
           icon = icon("hourglass-start"),
           color = "purple"),
         valueBox(
-          value = global_stats$Strings[global_stats$Metrics == "Waiting approval"], 
-          subtitle = "Waiting approval", 
+          value = suggestions_by_status$count[suggestions_by_status$StateId == 1], 
+          subtitle = "Suggestions Waiting approval", 
           href = "https://traducir.win/filters?suggestionsStatus=3",
           icon = icon("hourglass-half"),
           color = "purple"),
         valueBox(
-          value = nrow(rejected), 
-          subtitle = "Rejected", 
+          value = suggestions_by_status$count[suggestions_by_status$StateId == 4], 
+          subtitle = "Suggestions Rejected", 
           href = "https://db.traducir.win/queries/24#table",
           icon = icon("ban"),
           color = "purple")),
@@ -102,7 +106,7 @@ body <- dashboardBody(
         valueBox(
           value = length(unique(users$DisplayName[users$LastSeenDate >= Sys.Date()-5])), 
           subtitle = "Active Users", 
-          icon = icon("users"),
+          icon = icon("bolt"),
           color = "yellow")
       )
     ),
